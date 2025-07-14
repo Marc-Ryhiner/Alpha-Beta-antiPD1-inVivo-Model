@@ -1,4 +1,3 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -30,4 +29,5 @@ plt.xlim([0, 3.2])
 plt.ylim([0.9, 1])
 plt.legend(ncol=2)
 plt.grid(True)
+plt.tight_layout()
 plt.show()
