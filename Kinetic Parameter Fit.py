@@ -5,15 +5,15 @@ from scipy.optimize import curve_fit
 
 # Experimental time points (hours)
 t_data = np.array([0, 1, 2, 3])
-# Converted % → fractions → nmol
-cb_data = np.array([0.0, 18.5, 21.3, 21.7]) / 100 * 0.0015
-cc_data = np.array([0.0, 4.86, 7.08, 7.42]) / 100 * 0.0015
+# Converted % → fractions → nmol/mL
+cb_data = np.array([0.0, 18.5, 21.3, 21.7]) / 100 * 0.001
+cc_data = np.array([0.0, 4.86, 7.08, 7.42]) / 100 * 0.001
 
 # Measurement uncertainties (fraction)
-cb_err = np.array([1e-10, 3.45, 3.98, 4.81]) / 100 * 0.0015
-cc_err = np.array([1e-10, 0.48, 0.383, 0.975]) / 100 * 0.0015
+cb_err = np.array([1e-10, 3.45, 3.98, 4.81]) / 100 * 0.001
+cc_err = np.array([1e-10, 0.48, 0.383, 0.975]) / 100 * 0.001
 
-R = 0.005  # nmol/mL
+R = 0.00407  # nmol/mL
 
 def ode_system(t, y, kon, koff, kint, krel):
     cm, cb, cc = y
@@ -23,7 +23,7 @@ def ode_system(t, y, kon, koff, kint, krel):
     return [dcm, dcb, dcc]
 
 def model(t, kon, koff, kint, krel):
-    y0 = [0.0015, 0.0, 0.0]
+    y0 = [0.001, 0.0, 0.0]
     sol = solve_ivp(
         ode_system, [t.min(), t.max()], y0,
         args=(kon, koff, kint, krel),
@@ -62,7 +62,7 @@ bounds_upper = [
     np.inf    # k_rel min (/h)
 ]
 #p0 = [0.77, 7.7e-4, 1.67e-5, 2.67e-6]
-p0 = [0.1, 1.3, 1, 3]
+p0 = [108, 1.6, 0.7, 2.1]
 
 popt, pcov = curve_fit(
     model,
@@ -76,7 +76,6 @@ popt, pcov = curve_fit(
 )
 kon_fit, koff_fit, kint_fit, krel_fit = popt
 perr = np.sqrt(np.diag(pcov))
-#popt = [0.2, 2.9, 1, 3]
 
 print("Fitted parameters:")
 print(f"kon  = {kon_fit:.3e} ± {perr[0]:.1e}  mL·nmol⁻¹·h⁻¹")
@@ -87,7 +86,7 @@ print(f"krel = {krel_fit:.3e} ± {perr[3]:.1e}  h⁻¹")
 # Generate smooth fits over the time range
 t_fit = np.linspace(0, 3.2, 100)
 sol = solve_ivp(
-    ode_system, [0, 3.2], [0.0015, 0, 0],
+    ode_system, [0, 3.2], [0.001, 0, 0],
     args=tuple(popt), t_eval=t_fit
 )
 cb_fit, cc_fit = sol.y[1], sol.y[2]
@@ -100,9 +99,10 @@ ax.plot(t_fit, cb_fit * 1000, '-', label='Bound fit', color='#009E73')
 ax.plot(t_fit, cc_fit * 1000, '--', label='Cytoplasm fit', color='#F0E442')
 ax.grid(True, linewidth=0.5)
 ax.set_xlabel('Time (h)')
-ax.set_ylabel('Concentration (pM)')
+ax.set_ylabel('Concentration (pmol per mL)')
 ax.legend(ncol=2)
 ax.set_xlim([0, 3.2])
-ax.set_ylim([0, 0.4])
+ax.set_ylim([0, 0.3])
 ax.set_title('Cellular Kinetic Parameter Fit to Compartment Concentrations')
+plt.tight_layout()
 plt.show()
