@@ -97,7 +97,7 @@ ax.errorbar(t_data, cb_data * 1000, yerr=cb_err * 1000, fmt='o', label='Bound da
 ax.errorbar(t_data, cc_data * 1000, yerr=cc_err * 1000, fmt='s', label='Cytoplasm data', capsize=5, color='#D55E00')
 ax.plot(t_fit, cb_fit * 1000, '-', label='Bound fit', color='#009E73')
 ax.plot(t_fit, cc_fit * 1000, '--', label='Cytoplasm fit', color='#F0E442')
-ax.grid(True, linewidth=0.5)
+plt.grid(True, ls="--", linewidth=0.5)
 ax.set_xlabel('Time (h)')
 ax.set_ylabel('Concentration (pmol per mL)')
 ax.legend(ncol=2)
