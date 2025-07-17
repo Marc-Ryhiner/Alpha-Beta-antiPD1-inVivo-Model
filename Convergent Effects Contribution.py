@@ -1,4 +1,3 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # enables 3D
@@ -6,17 +5,19 @@ from mpl_toolkits.mplot3d import Axes3D  # enables 3D
 # Your parameters
 kon, koff = 131.4, 1.611    # mL·nmol⁻¹·h⁻¹, h⁻¹
 kint, krel = 0.7602, 2.138  # h⁻¹
-Si = 5.25e-8                # Gy Bq-1 h-1
+Si_per_N = 5.25e-8 / 100000 # Gy Bq-1 h-1 cell-1
 Sb, Sc = 0.374, 0.713       # Gy Bq-1 h-1
 
 
 # Define grid
-R = np.logspace(np.log10(1e-2), np.log10(1e-0), 300)
+R = np.logspace(np.log10(1e-3), np.log10(1e-1), 300)
 N = R * 19379845
-ci0 = np.logspace(np.log10(1.25e-2), np.log10(1.25), 300)
+Si = N * Si_per_N
+ci0 = np.logspace(np.log10(2.5e-3), np.log10(2.5e-1), 300)
 A = ci0 * 40
 Rg, ci0g = np.meshgrid(R, ci0)
 Ng, Ag = np.meshgrid(N, A)
+Sig, Ag = np.meshgrid(Si, A)
 
 # Solve quadratic for ci∞
 a = kon
@@ -34,7 +35,7 @@ cc_inf = (kint * cb_inf) / krel
 
 
 # p_con
-p_con = Si / (Si + (Sb * cb_inf + Sc * cc_inf) / (Ng * ci0)) * 100
+p_con = Sig / (Sig + (Sb * cb_inf + Sc * cc_inf) / (Ng * ci0)) * 100
 
 # Map to colors
 cmap = plt.get_cmap('magma')
@@ -60,10 +61,10 @@ ax.zaxis.pane.set_visible(False)
 ax.set_xlabel('Number of cancer cells')
 ax.set_ylabel('Initial activity (MBq)')
 ax.set_zlim(0, 0.01)
-ax.set_xlim([0, 2e7])
-ax.set_ylim([0, 50])
-ax.set_xticks([0,1e7,2e7])
-ax.set_yticks([0,25,50])
+ax.set_xlim([0, 2e6])
+ax.set_ylim([0, 10])
+ax.set_xticks([0,1e6,2e6])
+ax.set_yticks([0,5,10])
 ax.tick_params(axis='y', which='major', pad=10)
 ax.xaxis.labelpad = 15
 ax.yaxis.labelpad = 20
