@@ -29,8 +29,8 @@ def ode_system_2(t, y, ci0, A0, alpha, S_i, p):
     k_on, k_off, k_int, k_rel = p['k_on'], p['k_off'], p['k_int'], p['k_rel']
     λ = p['lambda_Lu']
     exp_decay = np.exp(0.0277 * t)
-    dci = k_off * cb - k_on * (p['R'] - cb) * ci
-    dcb = k_on * (p['R'] - cb) * ci + k_rel * cc - (k_off + k_int) * cb
+    dci = k_off * cb - k_on * (p['R'] * np.exp(t * 0.0277) - cb) * ci
+    dcb = k_on * (p['R'] * np.exp(t * 0.0277) - cb) * ci + k_rel * cc - (k_off + k_int) * cb
     dcc = k_int * cb - k_rel * cc
     dA = -λ * A
     dD = (A / ci0) * (p['S_b'] * (cb + ci) + p['S_c'] * cc) / (p['Ncell'] * exp_decay)
@@ -75,8 +75,8 @@ def simulate_survival_over_time(ci0, A0, alpha, S_i, p):
 # Parameters
 ci0 = 0.05
 A0 = 2e6  # 2 MBq
-alpha = 0.178
-S_i = 1.95e-7
+alpha = 0.177
+S_i = 1.83e-7
 
 # Run simulation
 time, survival_rate, clinical_effect_rate, survival, clinical_effect = simulate_survival_over_time(ci0, A0, alpha, S_i, base_params)
