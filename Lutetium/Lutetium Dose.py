@@ -10,8 +10,8 @@ base_params = {
 }
 
 # Constants for dose calculation
-S_i = 1.95e-7  # Gy/Bq·h (interstitial)
-alpha = 0.178  # Gy^-1
+S_i = 1.83e-7  # Gy/Bq·h (interstitial)
+alpha = 0.177  # Gy^-1
 
 # ODE system for Phase 1 (0–3h)
 def ode_system(t, y, ci0, A0, alpha, S_i, p):
@@ -32,8 +32,8 @@ def ode_system_2(t, y, ci0, A0, alpha, S_i, p):
     k_on, k_off, k_int, k_rel = p['k_on'], p['k_off'], p['k_int'], p['k_rel']
     λ = p['lambda_Lu']
     exp_decay = np.exp(0.0277 * t)
-    dci = k_off * cb - k_on * (p['R'] - cb) * ci
-    dcb = k_on * (p['R'] - cb) * ci + k_rel * cc - k_off * cb - k_int * cb
+    dci = k_off * cb - k_on * (p['R'] * np.exp(t * 0.0277) - cb) * ci
+    dcb = k_on * (p['R'] * np.exp(t * 0.0277) - cb) * ci + k_rel * cc - k_off * cb - k_int * cb
     dcc = k_int * cb - k_rel * cc
     dA = -λ * A
     dD = (A / ci0) * (p['S_b'] * (cb + ci) + p['S_c'] * cc) / (p['Ncell'] * exp_decay)
