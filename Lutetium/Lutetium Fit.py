@@ -44,8 +44,8 @@ def ode_system_2(t, y, ci0, A0, alpha, S_i, p):
     k_on, k_off, k_int, k_rel = p['k_on'], p['k_off'], p['k_int'], p['k_rel']
     λ = p['lambda_Lu']
     Sb, Sc, N, R = p['S_b'], p['S_c'], p['Ncell'], p['R']
-    dci = k_off * cb - k_on * (R - cb) * ci
-    dcb = k_on * (R - cb) * ci + k_rel * cc - k_off * cb - k_int * cb
+    dci = k_off * cb - k_on * (R * np.exp(t * 0.0277) - cb) * ci
+    dcb = k_on * (R * np.exp(t * 0.0277) - cb) * ci + k_rel * cc - k_off * cb - k_int * cb
     dcc = k_int * cb - k_rel * cc
     dA = - λ * A
     dD = (A / ci0) * (Sb * (cb + ci) + Sc * cc) / (N * np.exp(t * 0.0277))
