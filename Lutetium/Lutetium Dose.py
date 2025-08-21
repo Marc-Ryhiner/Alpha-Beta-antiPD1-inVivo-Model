@@ -99,7 +99,7 @@ plt.legend(loc='center left')
 ax2 = ax1.twinx()
 color2 = 'tab:red'
 ax2.set_ylabel('Accumulated Dose (Gy)', color=color2)
-ax2.plot(time, dose, color=color2, linestyle='--', label='Accumulated Dose')
+ax2.plot(time, dose, color=color2, linestyle='-', label='Accumulated Dose')
 ax2.tick_params(axis='y', labelcolor=color2)
 ax2.set_yscale('log')
 ax2.set_ylim(0.04, 6)
