@@ -166,8 +166,8 @@ def combined_2(t, Z):
 
 tspan = (0, 0.5)
 t_eval = np.linspace(*tspan, 167)
-y0 = [0.00889, 0, 0, 0, 0, 0, 0]
-A0 = [2000, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+y0 = [0.00889 * np.exp(mu225ac * 0.5) * 0.2652946819207342, 0, 0, 0, 0, 0, 0]
+A0 = [2000 * np.exp(mu225ac * 0.5) * 0.2652946819207342, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 Z0 = y0 + A0
 sol_0 = solve_ivp(combined_0, tspan, Z0, t_eval=t_eval, method='BDF')
 
@@ -243,10 +243,8 @@ sol_2 = solve_ivp(combined_2, tspan, Z0, t_eval=t_eval, method='BDF')
 i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb = sol_2.y[:18]
 Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb = sol_2.y[18:]
 
-print(Ac_dose_rate[-1])
 
 Ac_dose_rate = Ac * ((S_values['S_m_225Ac'] * (i225ac + m225ac) + S_values['S_c_225Ac'] * c225ac) / ((i225ac + m225ac + c225ac) * N_cell * np.exp(0.0277 * sol_2.t)))
-print(Ac_dose_rate[0])
 Fr_dose_rate = Fr * ((S_values['S_m_221Fr'] * i221fr + S_values['S_c_221Fr'] * c221fr) / ((i221fr + c221fr) * N_cell * np.exp(0.0277 * sol_2.t)))
 Frg_dose_rate = Frg * ((S_values['S_m_221Frg'] * i221fr + S_values['S_c_221Frg'] * c221fr) / ((i221fr + c221fr) * N_cell * np.exp(0.0277 * sol_2.t)))
 At_dose_rate = At * ((S_values['S_m_217At'] * i217at + S_values['S_c_217At'] * c217at) / ((i217at + c217at) * N_cell * np.exp(0.0277 * sol_2.t)))
@@ -269,7 +267,7 @@ LowLET_dose_2 = cumtrapz(LowLET_dose_rate_2, sol_2.t)
 fig, ax1 = plt.subplots(figsize=(8, 5))
 
 color1 = 'tab:blue'
-ax1.set_xlabel('Time (h)')
+ax1.set_xlabel('Time after Experiment Start (h)')
 ax1.set_ylabel('Dose Rate (Gy per h)', color=color1)
 ax1.plot(sol_1.t, HighLET_dose_rate_1, color='steelblue')
 line1, = ax1.plot(sol_2.t + 3, HighLET_dose_rate_2, color='steelblue', label=' ')
@@ -279,8 +277,8 @@ ax1.tick_params(axis='y', labelcolor=color1)
 ax1.set_xscale('log')
 ax1.set_yscale('log')
 ax1.set_xlim(0.1, 200)
-ax1.set_ylim(3e-6, 0.3)
-ax1.yaxis.grid(True, which='both', ls='--', linewidth=0.5, color='#aab7cc')
+ax1.set_ylim(8e-7, 8e-2)
+ax1.yaxis.grid(True, which='major', ls='--', linewidth=0.5, color='#aab7cc')
 ax1.xaxis.grid(True, which='both', ls='--', linewidth=0.5)
 
 # Second axis for cumulative dose
@@ -293,15 +291,15 @@ ax2.plot(sol_1.t[1:], LowLET_dose_1, color='tomato')
 line4, = ax2.plot(np.concatenate((np.expand_dims(sol_1.t[-1], axis=0), sol_2.t[1:] + 3)), np.concatenate((np.expand_dims(LowLET_dose_1[-1], axis=0), LowLET_dose_2 + LowLET_dose_1[-1])), color='tomato', label=' ')
 ax2.tick_params(axis='y', labelcolor=color2)
 ax2.set_yscale('log')
-ax2.set_ylim(1e-5, 20)
-ax2.yaxis.grid(True, which='both', ls='--', linewidth=0.5, color='#d2a8a8')
+ax2.set_ylim(3e-6, 3)
+ax2.yaxis.grid(True, which='major', ls='--', linewidth=0.5, color='#d2a8a8')
 
 line5 = plt.axvline(3, color='gray', linestyle='--', label='Cell Plating')
 
 lines = [line1, line3, line2, line4, line5]
 labels = [line.get_label() for line in lines]
 ax1.legend(lines, labels, loc='upper left', title='High / Low LET', ncol=3, alignment='left', columnspacing=0)
-plt.title('Dose Rate and Accumulated Dose during Ac-225 Treatment $A_0=2 kBq$')
+plt.title('LET Doses during Ac-225 Treatment for $A_0=2kBq$')
 fig.tight_layout()
 #fig.legend()
 plt.show()

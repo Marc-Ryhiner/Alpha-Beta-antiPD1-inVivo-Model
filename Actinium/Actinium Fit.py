@@ -1,11 +1,47 @@
 import numpy as np
-from scipy.integrate import solve_ivp, quad
+import pandas as pd
+from scipy.integrate import solve_ivp
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
-from scipy.interpolate import interp1d
+from scipy.interpolate import PchipInterpolator
 
-# Global cache for interpolated functions (used inside memory_integral)
-interpolators = {}
+# --- Load Lea-Catcheside factors ---
+lea_interpolators = {}
+
+
+def load_lea_csv(activity):
+    df = pd.read_csv(f"Lea-Catcheside{activity}.csv")
+    times = df["time"].values
+    values = df[activity].values
+    f = PchipInterpolator(times, np.clip(values, 0, 1), extrapolate=True)
+    return lambda t: np.clip(f(t), 0.0, 1.0)
+
+
+lea_interpolators["0.0"] = load_lea_csv("0")
+lea_interpolators["0.037"] = load_lea_csv("0.037")
+lea_interpolators["0.1"] = load_lea_csv("0.1")
+lea_interpolators["0.185"] = load_lea_csv("0.185")
+lea_interpolators["0.25"] = load_lea_csv("0.25")
+lea_interpolators["0.37"] = load_lea_csv("0.37")
+lea_interpolators["0.5"] = load_lea_csv("0.5")
+lea_interpolators["0.75"] = load_lea_csv("0.75")
+lea_interpolators["1.25"] = load_lea_csv("1.25")
+lea_interpolators["1.85"] = load_lea_csv("1.85")
+
+
+# Robust getter for Lea–Catcheside: choose nearest available activity curve (A0 is in Bq, keys are in kBq)
+_lea_keys = np.array([float(k) for k in lea_interpolators.keys()])
+def get_lea_interp(A0):
+    target = A0 / 1000.0  # convert to kBq to match keys
+    idx = int(np.argmin(np.abs(_lea_keys - target)))
+    key = str(_lea_keys[idx])
+    # ensure exact string key that exists in dict (handles '0.0' vs '0.0...')
+    for k in lea_interpolators.keys():
+        if float(k) == float(key):
+            return lea_interpolators[k]
+    # fallback (shouldn't hit)
+    return lea_interpolators["0.0"]
+
 
 mu225ac = 2.91e-3  # h⁻¹
 mu221fr = 8.64
@@ -56,117 +92,10 @@ data = np.array([
     [0.00822, 1850, 0.000994, 0.000486]
 ])
 
-
-# Define memory kernel function for G_x^num
-def memory_integral(t, dD_func, px_f, px_s, lambd_f, lambd_s):
-    def integrand(t1):
-        def inner_integrand(t2):
-            return dD_func(t2) * (px_f * np.exp(-lambd_f * (t1 - t2)) + px_s * np.exp(-lambd_s * (t1 - t2)))
-        inner_val, _ = quad(inner_integrand, 0, t1)
-        return dD_func(t1) * inner_val
-
-    result, _ = quad(integrand, 0, t)
-    return 2 * result
-
-
-def ode_help(t, y, ci0, A0, p):
-    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb = y
-
-    kon, koff, kint, krel = p['k_on'], p['k_off'], p['k_int'], p['k_rel']
-    N, R = p['Ncell'], p['R']
-
-    di225ac = koff * m225ac - (kon * (R - m225ac - m_u) + mu225ac) * i225ac
-    dm225ac = kon * (R - m225ac - m_u) * i225ac + krel * c225ac - (koff + kint + mu225ac) * m225ac
-    dc225ac = kint * m225ac - (krel + mu225ac) * c225ac
-
-    diu = koff * m_u + mu225ac * i225ac - kon * (R - m225ac - m_u) * iu
-    dm_u = kon * (R - m225ac - m_u) * iu + krel * cu + mu225ac * m225ac - (koff + kint) * m_u
-    dcu = kint * m_u + mu225ac * c225ac - krel * cu
-
-    di221fr = mu225ac * (i225ac + m225ac) - mu221fr * i221fr
-    dc221fr = mu225ac * c225ac - mu221fr * c221fr
-
-    di217at = mu221fr * i221fr - mu217at * i217at
-    dc217at = mu221fr * c221fr - mu217at * c217at
-
-    di213bi = mu217at * i217at - mu213bi * i213bi
-    dc213bi = mu217at * c217at - mu213bi * c213bi
-
-    di209tl = pr['Bi213_a'] * mu213bi * i213bi - mu209tl * i209tl
-    dc209tl = pr['Bi213_a'] * mu213bi * c213bi - mu209tl * c209tl
-
-    di213po = pr['Bi213_b'] * mu213bi * i213bi - mu213po * i213po
-    dc213po = pr['Bi213_b'] * mu213bi * c213bi - mu213po * c213po
-
-    di209pb = mu209tl * i209tl + mu213po * i213po - mu209pb * i209pb
-    dc209pb = mu209tl * c209tl + mu213po * c213po - mu209pb * c209pb
-
-    dAc = -mu225ac * Ac
-    dFr = mu221fr * (Ac - Fr)
-    dFrg = pr['Fr221_g'] * dFr
-    dAt = mu217at * (Fr - At)
-    dBia = mu213bi * (pr['Bi213_a'] * At - Bia)
-    dBib = mu213bi * (pr['Bi213_b'] * At - Bib)
-    dBig = pr['Bi213_g'] * mu213bi * (At - Big)
-    dPo = mu213po * (Bib - Po)
-    dTl = mu209tl * (Bia - Tl)
-    dPb = mu209pb * (Po + Tl - Pb)
-
-    return [di225ac, dm225ac, dc225ac, diu, dm_u, dcu, di221fr, dc221fr, di217at, dc217at, di213bi, dc213bi, di209tl, dc209tl, di213po, dc213po, di209pb, dc209pb,
-            dAc, dFr, dFrg, dAt, dBia, dBib, dBig, dPo, dTl, dPb]
-
-
-def ode_help_2(t, y, ci0, A0, p):
-    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb = y
-
-    kon, koff, kint, krel = p['k_on'], p['k_off'], p['k_int'], p['k_rel']
-    N, R = p['Ncell'], p['R']
-
-    di225ac = koff * m225ac - (kon * (R * np.exp(t * 0.0277) - m225ac - m_u) + mu225ac) * i225ac
-    dm225ac = kon * (R * np.exp(t * 0.0277) - m225ac - m_u) * i225ac + krel * c225ac - (koff + kint + mu225ac) * m225ac
-    dc225ac = kint * m225ac - (krel + mu225ac) * c225ac
-
-    diu = koff * m_u + mu225ac * i225ac - kon * (R * np.exp(t * 0.0277) - m225ac - m_u) * iu
-    dm_u = kon * (R * np.exp(t * 0.0277) - m225ac - m_u) * iu + krel * cu + mu225ac * m225ac - (koff + kint) * m_u
-    dcu = kint * m_u + mu225ac * c225ac - krel * cu
-
-    di221fr = mu225ac * (i225ac + m225ac) - mu221fr * i221fr
-    dc221fr = mu225ac * c225ac - mu221fr * c221fr
-
-    di217at = mu221fr * i221fr - mu217at * i217at
-    dc217at = mu221fr * c221fr - mu217at * c217at
-
-    di213bi = mu217at * i217at - mu213bi * i213bi
-    dc213bi = mu217at * c217at - mu213bi * c213bi
-
-    di209tl = pr['Bi213_a'] * mu213bi * i213bi - mu209tl * i209tl
-    dc209tl = pr['Bi213_a'] * mu213bi * c213bi - mu209tl * c209tl
-
-    di213po = pr['Bi213_b'] * mu213bi * i213bi - mu213po * i213po
-    dc213po = pr['Bi213_b'] * mu213bi * c213bi - mu213po * c213po
-
-    di209pb = mu209tl * i209tl + mu213po * i213po - mu209pb * i209pb
-    dc209pb = mu209tl * c209tl + mu213po * c213po - mu209pb * c209pb
-
-    dAc = -mu225ac * Ac
-    dFr = mu221fr * (Ac - Fr)
-    dFrg = pr['Fr221_g'] * dFr
-    dAt = mu217at * (Fr - At)
-    dBia = mu213bi * (pr['Bi213_a'] * At - Bia)
-    dBib = mu213bi * (pr['Bi213_b'] * At - Bib)
-    dBig = pr['Bi213_g'] * mu213bi * (At - Big)
-    dPo = mu213po * (Bib - Po)
-    dTl = mu209tl * (Bia - Tl)
-    dPb = mu209pb * (Po + Tl - Pb)
-
-    return [di225ac, dm225ac, dc225ac, diu, dm_u, dcu, di221fr, dc221fr, di217at, dc217at, di213bi, dc213bi, di209tl, dc209tl, di213po, dc213po, di209pb, dc209pb,
-            dAc, dFr, dFrg, dAt, dBia, dBib, dBig, dPo, dTl, dPb]
-
-
 def ode_system(t, y, ci0, A0, alpha, beta, px_f, px_s, lambd_f, lambd_s, alpha_low, p):
     eps = 1e-12
 
-    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb, D_high, D_low, S = y
+    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb, D_high, D_low = y
 
     kon, koff, kint, krel = p['k_on'], p['k_off'], p['k_int'], p['k_rel']
     N, R = p['Ncell'], p['R']
@@ -218,48 +147,33 @@ def ode_system(t, y, ci0, A0, alpha, beta, px_f, px_s, lambd_f, lambd_s, alpha_l
              Bib * (S_values['S_i_213Bib'] + S_values['S_c_213Bib'] * c213bi / (N * (i213bi + c213bi) + eps)) + \
              Big * (S_values['S_i_213Big'] + S_values['S_c_213Big'] * c213bi / (N * (i213bi + c213bi) + eps)) + \
              Tl * (S_values['S_i_209Tl'] + S_values['S_c_209Tl'] * c209tl / (N * (i209tl + c209tl) + eps)) + \
-             Po * (S_values['S_i_209Pb'] + S_values['S_c_209Pb'] * c209pb / (N * (i209pb + c209pb) + eps))
+             Pb * (S_values['S_i_209Pb'] + S_values['S_c_209Pb'] * c209pb / (N * (i209pb + c209pb) + eps))
 
-    # Define dD function for integration
-    def dD_func(tau):
-        Ac_tau = interpolators['Ac1'](tau)
-        Fr_tau = interpolators['Fr1'](tau)
-        At_tau = interpolators['At1'](tau)
-        Bia_tau = interpolators['Bia1'](tau)
-        Po_tau = interpolators['Po1'](tau)
-        i225ac_tau = interpolators['i225ac1'](tau)
-        i221fr_tau = interpolators['i221fr1'](tau)
-        i217at_tau = interpolators['i217at1'](tau)
-        i213bi_tau = interpolators['i213bi1'](tau)
-        i213po_tau = interpolators['i213po1'](tau)
-        m225ac_tau = interpolators['m225ac1'](tau)
-        c225ac_tau = interpolators['c225ac1'](tau)
-        c221fr_tau = interpolators['c221fr1'](tau)
-        c217at_tau = interpolators['c217at1'](tau)
-        c213bi_tau = interpolators['c213bi1'](tau)
-        c213po_tau = interpolators['c213po1'](tau)
-        return Ac_tau * (S_values['S_i_225Ac'] + (S_values['S_m_225Ac'] * m225ac_tau + S_values['S_c_225Ac'] * c225ac_tau) / (N * (i225ac_tau + m225ac_tau + c225ac_tau) + eps)) + \
-               Fr_tau * (S_values['S_i_221Fr'] + S_values['S_c_221Fr'] * c221fr_tau / (N * (i221fr_tau + c221fr_tau) + eps)) + \
-               At_tau * (S_values['S_i_217At'] + S_values['S_c_217At'] * c217at_tau / (N * (i217at_tau + c217at_tau) + eps)) + \
-               Bia_tau * (S_values['S_i_213Bia'] + S_values['S_c_213Bia'] * c213bi_tau / (N * (i213bi_tau + c213bi_tau) + eps)) + \
-               Po_tau * (S_values['S_i_213Po'] + S_values['S_c_213Po'] * c213po_tau / (N * (i213po_tau + c213po_tau) + eps))
-
-    G_num = memory_integral(t, dD_func, px_f, px_s, lambd_f, lambd_s)
-    dG_num = 2 * dD_high * quad(lambda t2: dD_func(t2) * np.exp(-lambd_f * (t - t2)) * np.exp(-lambd_s * (t - t2)), 0, t)[0]
-
-    sum_term = alpha * dD_high + beta * dG_num
-    exp_term = - (alpha * D_high + beta * G_num)
-    dS = -sum_term * np.exp(exp_term) - alpha_low * dD_low * np.exp(-alpha_low * D_low)
+#    # Use nearest Lea–Catcheside curve for the provided A0
+#    lea = get_lea_interp(A0)
+#
+#    def derivative_interp(interp_func, t, D, h=1e-3):
+#        return (interp_func(t + h) - interp_func(t - h)) * D ** 2 / (2 * h)
+#
+#    G_num = lea(t) * (D_high ** 2)
+#    dG_num = derivative_interp(lea, t, D_high)
+#
+#    sum_term = alpha * dD_high + beta * dG_num + alpha_low * dD_low
+#    exp_term = - (alpha * D_high + beta * G_num + alpha_low * D_low)
+#    dS = -sum_term * np.exp(exp_term)
+#
+#    if A0 == 2000:
+#        print(alpha * dD_high + beta * dG_num + alpha_low * dD_low)
 
     return [di225ac, dm225ac, dc225ac, diu, dm_u, dcu, di221fr, dc221fr, di217at, dc217at, di213bi, dc213bi, di209tl, dc209tl, di213po, dc213po, di209pb, dc209pb,
             dAc, dFr, dFrg, dAt, dBia, dBib, dBig, dPo, dTl, dPb,
-            dD_low, dD_high, dS]
+            dD_high, dD_low]
 
 
 def ode_system_2(t, y, ci0, A0, alpha, beta, px_f, px_s, lambd_f, lambd_s, alpha_low, p):
     eps = 1e-12
 
-    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb, D_high, D_low, S = y
+    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb, D_high, D_low = y
 
     kon, koff, kint, krel = p['k_on'], p['k_off'], p['k_int'], p['k_rel']
     N, R = p['Ncell'], p['R']
@@ -313,75 +227,51 @@ def ode_system_2(t, y, ci0, A0, alpha, beta, px_f, px_s, lambd_f, lambd_s, alpha
              Tl * ((S_values['S_m_209Tl'] * i209tl + S_values['S_c_209Tl'] * c209tl) / (N * np.exp(t * 0.0277) * (i209tl + c209tl) + eps)) + \
              Pb * ((S_values['S_m_209Pb'] * i209pb + S_values['S_c_209Pb'] * c209pb) / (N * np.exp(t * 0.0277) * (i209pb + c209pb) + eps))
 
-    # Define dD function for integration
-    def dD_func(tau):
-        Ac_tau = interpolators['Ac2'](tau)
-        Fr_tau = interpolators['Fr2'](tau)
-        At_tau = interpolators['At2'](tau)
-        Bia_tau = interpolators['Bia2'](tau)
-        Po_tau = interpolators['Po2'](tau)
-        i225ac_tau = interpolators['i225ac2'](tau)
-        i221fr_tau = interpolators['i221fr2'](tau)
-        i217at_tau = interpolators['i217at2'](tau)
-        i213bi_tau = interpolators['i213bi2'](tau)
-        i213po_tau = interpolators['i213po2'](tau)
-        m225ac_tau = interpolators['m225ac2'](tau)
-        c225ac_tau = interpolators['c225ac2'](tau)
-        c221fr_tau = interpolators['c221fr2'](tau)
-        c217at_tau = interpolators['c217at2'](tau)
-        c213bi_tau = interpolators['c213bi2'](tau)
-        c213po_tau = interpolators['c213po2'](tau)
-        return Ac_tau * ((S_values['S_m_225Ac'] * (i225ac_tau + m225ac_tau) + S_values['S_c_225Ac'] * c225ac_tau) / (N * np.exp(t * 0.0277) * (i225ac_tau + m225ac_tau + c225ac_tau) + eps)) + \
-               Fr_tau * ((S_values['S_m_221Fr'] * i221fr_tau + S_values['S_c_221Fr'] * c221fr_tau) / (N * np.exp(t * 0.0277) * (i221fr_tau + c221fr_tau) + eps)) + \
-               At_tau * ((S_values['S_m_217At'] * i217at_tau + S_values['S_c_217At'] * c217at_tau) / (N * np.exp(t * 0.0277) * (i217at_tau + c217at_tau) + eps)) + \
-               Bia_tau * ((S_values['S_m_213Bia'] * i213bi_tau + S_values['S_c_213Bia'] * c213bi_tau) / (N * np.exp(t * 0.0277) * (i213bi_tau + c213bi_tau) + eps)) + \
-               Po_tau * ((S_values['S_m_213Po'] * i213po_tau + S_values['S_c_213Po'] * c213po_tau) / (N * np.exp(t * 0.0277) * (i213po_tau + c213po_tau) + eps))
 
-    G_num = memory_integral(t, dD_func, px_f, px_s, lambd_f, lambd_s)
-    dG_num = 2 * dD_high * quad(lambda t2: dD_func(t2) * np.exp(-lambd_f * (t - t2)) * np.exp(-lambd_s * (t - t2)), 0, t)[0]
-
-    sum_term = alpha * dD_high + beta * dG_num
-    exp_term = - (alpha * D_high + beta * G_num)
-    dS = -sum_term * np.exp(exp_term) - alpha_low * dD_low * np.exp(-alpha_low * D_low)
+#    # Use nearest Lea–Catcheside curve for the provided A0
+#    lea = get_lea_interp(A0)
+#
+#    def derivative_interp(interp_func, t, D, h=1e-3):
+#        return (interp_func(t + h) - interp_func(t - h)) * D ** 2 / (2 * h)
+#
+#
+#    G_num = lea(t + 3) * (D_high ** 2)
+#    dG_num = derivative_interp(lea, t + 3, D_high)
+#
+#    sum_term = alpha * dD_high + beta * dG_num + alpha_low * dD_low
+#    exp_term = - (alpha * D_high + beta * G_num + alpha_low * D_low)
+#    dS = -sum_term * np.exp(exp_term)
+#
+#    if A0 == 2000:
+#        print(alpha * dD_high + beta * dG_num + alpha_low * dD_low)
 
     return [di225ac, dm225ac, dc225ac, diu, dm_u, dcu, di221fr, dc221fr, di217at, dc217at, di213bi, dc213bi, di209tl, dc209tl, di213po, dc213po, di209pb, dc209pb,
             dAc, dFr, dFrg, dAt, dBia, dBib, dBig, dPo, dTl, dPb,
-            dD_low, dD_high, dS]
+            dD_high, dD_low]
 
 
 # Simulation wrapper
 def simulate_survival(ci0, A0, alpha, beta):
-    y0 = [ci0 * 0.9985, 0, 0, ci0 * 0.001454, 0, 0, ci0 * 3.320e-4, 0, ci0 * 3.774e-8, 0, ci0 * 9.343e-4, 0, ci0 * 2.530e-6, 0, ci0 * 1.238e-9, 0, ci0 * 1.794e-4, 0,
-          A0 * 0.9985, A0 * 0.9857, A0 * 0.1124, A0 * 0.9857, A0 * 6.259e-3, A0 * 0.2862, A0 * 0.08664, A0 * 0.2862, A0 * 3.104e-3, A0 * 0.01325,
-          0, 0, 1]
+    y0 = [ci0 * 0.9985 * 0.2652946819207342, 0, 0,
+          ci0 * 0.001454 * 0.2652946819207342, 0, 0,
+          ci0 * 3.320e-4 * 0.2652946819207342, 0,
+          ci0 * 3.774e-8 * 0.2652946819207342, 0,
+          ci0 * 9.343e-4 * 0.2652946819207342, 0,
+          ci0 * 2.530e-6 * 0.2652946819207342, 0,
+          ci0 * 1.238e-9 * 0.2652946819207342, 0,
+          ci0 * 1.794e-4 * 0.2652946819207342, 0,
+          A0 * 0.9985 * 0.2652946819207342,
+          A0 * 0.9857 * 0.2652946819207342,
+          A0 * 0.1124 * 0.2652946819207342,
+          A0 * 0.9857 * 0.2652946819207342,
+          A0 * 6.259e-3 * 0.2652946819207342,
+          A0 * 0.2862 * 0.2652946819207342,
+          A0 * 0.08664 * 0.2652946819207342,
+          A0 * 0.2862 * 0.2652946819207342,
+          A0 * 3.104e-3 * 0.2652946819207342,
+          A0 * 0.01325 * 0.2652946819207342,
+          0, 0]
 
-    # Dense output for interpolation
-    help1 = solve_ivp(
-        ode_help, [0, 3], y0[:-3],
-        args=(ci0, A0, base_params),
-        dense_output=True, method='BDF', rtol=1e-6, atol=1e-8
-    )
-
-    # Create interpolators
-    t_vals = np.linspace(0, 3, 300)
-    sol_vals = help1.sol(t_vals)
-    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb = sol_vals
-    interpolators['Ac1'] = interp1d(t_vals, Ac, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['Fr1'] = interp1d(t_vals, Fr, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['At1'] = interp1d(t_vals, At, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['Bia1'] = interp1d(t_vals, Bia, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['Po1'] = interp1d(t_vals, Po, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['i225ac1'] = interp1d(t_vals, i225ac, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['i221fr1'] = interp1d(t_vals, i221fr, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['i217at1'] = interp1d(t_vals, i217at, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['i213bi1'] = interp1d(t_vals, i213bi, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['i213po1'] = interp1d(t_vals, i213po, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['m225ac1'] = interp1d(t_vals, m225ac, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['c225ac1'] = interp1d(t_vals, c225ac, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['c221fr1'] = interp1d(t_vals, c221fr, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['c217at1'] = interp1d(t_vals, c217at, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['c213bi1'] = interp1d(t_vals, c213bi, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['c213po1'] = interp1d(t_vals, c213po, kind='cubic', bounds_error=False, fill_value='extrapolate')
 
     # Solve phase 1
     sol1 = solve_ivp(
@@ -390,11 +280,11 @@ def simulate_survival(ci0, A0, alpha, beta):
         dense_output=True, method='BDF', rtol=1e-6, atol=1e-8
     )
 
-    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb, D_high, D_low, S = sol1.y[:, -1]
+    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb, D_high, D_low = sol1.y[:, -1]
 
     # Phase 2
+    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb = [sol1.y[0, -1], sol1.y[1, -1], sol1.y[2, -1], sol1.y[3, -1], sol1.y[4, -1], sol1.y[5, -1], sol1.y[6, -1], sol1.y[7, -1], sol1.y[8, -1], sol1.y[9, -1], sol1.y[10, -1], sol1.y[11, -1], sol1.y[12, -1], sol1.y[13, -1], sol1.y[14, -1], sol1.y[15, -1], sol1.y[16, -1], sol1.y[17, -1]]
     eps = 1e-12
-    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb = [0, sol1.y[1, -1], sol1.y[2, -1], 0, sol1.y[4, -1], sol1.y[5, -1], 0, sol1.y[7, -1], 0, sol1.y[9, -1], 0, sol1.y[11, -1], 0, sol1.y[13, -1], 0, sol1.y[15, -1], 0, sol1.y[17, -1]]
     Ac2 = Ac * m225ac / (i225ac + m225ac + c225ac + eps) + Ac * c225ac / (i225ac + m225ac + c225ac + eps)
     Fr2 = Fr * c221fr / (i221fr + c221fr + eps)
     Frg2 = Frg * c221fr / (i221fr + c221fr + eps)
@@ -405,34 +295,8 @@ def simulate_survival(ci0, A0, alpha, beta):
     Po2 = Po * c213po / (i213po + c213po + eps)
     Tl2 = Tl * c209tl / (i209tl + c209tl + eps)
     Pb2 = Pb * c209pb / (i209pb + c209pb + eps)
-    y0_phase2 = [i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac2, Fr2, Frg2, At2, Bia2, Bib2, Big2, Po2, Tl2, Pb2, D_high, D_low, S]
-
-    help2 = solve_ivp(
-        ode_help_2, [0, 168], y0_phase2[:-3],
-        args=(0, A0, base_params),
-        t_eval=[168], method='BDF', rtol=1e-6, atol=1e-8, dense_output=True
-    )
-
-    # Create interpolators
-    t_vals = np.linspace(0, 168, 1000)
-    sol_vals = help2.sol(t_vals)
-    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb = sol_vals
-    interpolators['Ac2'] = interp1d(t_vals, Ac, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['Fr2'] = interp1d(t_vals, Fr, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['At2'] = interp1d(t_vals, At, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['Bia2'] = interp1d(t_vals, Bia, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['Po2'] = interp1d(t_vals, Po, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['i225ac2'] = interp1d(t_vals, i225ac, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['i221fr2'] = interp1d(t_vals, i221fr, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['i217at2'] = interp1d(t_vals, i217at, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['i213bi2'] = interp1d(t_vals, i213bi, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['i213po2'] = interp1d(t_vals, i213po, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['m225ac2'] = interp1d(t_vals, m225ac, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['c225ac2'] = interp1d(t_vals, c225ac, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['c221fr2'] = interp1d(t_vals, c221fr, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['c217at2'] = interp1d(t_vals, c217at, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['c213bi2'] = interp1d(t_vals, c213bi, kind='cubic', bounds_error=False, fill_value='extrapolate')
-    interpolators['c213po2'] = interp1d(t_vals, c213po, kind='cubic', bounds_error=False, fill_value='extrapolate')
+    i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb = [0, sol1.y[1, -1], sol1.y[2, -1], 0, sol1.y[4, -1], sol1.y[5, -1], 0, sol1.y[7, -1], 0, sol1.y[9, -1], 0, sol1.y[11, -1], 0, sol1.y[13, -1], 0, sol1.y[15, -1], 0, sol1.y[17, -1]]
+    y0_phase2 = [i225ac, m225ac, c225ac, iu, m_u, cu, i221fr, c221fr, i217at, c217at, i213bi, c213bi, i209tl, c209tl, i213po, c213po, i209pb, c209pb, Ac2, Fr2, Frg2, At2, Bia2, Bib2, Big2, Po2, Tl2, Pb2, D_high, D_low]
 
     sol2 = solve_ivp(
         ode_system_2, [0, 168], y0_phase2,
@@ -440,7 +304,24 @@ def simulate_survival(ci0, A0, alpha, beta):
         t_eval=[168], method='BDF', rtol=1e-6, atol=1e-8
     )
 
-    return float(sol2.y[-1, -1])
+
+    # Use nearest Lea–Catcheside curve for the provided A0
+    lea = get_lea_interp(A0)
+
+
+    G = lea(171)
+    dose_high = sol2.y[-2, -1]
+    dose_low = sol2.y[-1, -1]
+
+    survival = np.exp(- alpha * dose_high - beta * dose_high ** 2 * G - alpha_low * dose_low)
+
+    if A0 == 2000:
+        print('Clinical Effect linear: ' + str(dose_high * alpha))
+        print('Clinical Effect quadratic: ' + str(dose_high * beta * G))
+        print('Clinical Effect low: ' + str(dose_low * alpha_low))
+
+    return survival
+    #return float(sol2.y[-1, -1])
 
 
 # Objective function
@@ -453,16 +334,58 @@ def objective(theta):
         log_model = np.log(S_model + eps)
         log_obs = np.log(S_obs + eps)
         log_sigma = np.log(sigma + eps)
-        chi2 += ((log_model - log_obs) / (log_sigma)) ** 2
+        chi2 += ((log_model - log_obs) / log_sigma) ** 2
     return chi2
 
 # Initial guesses and bounds for alpha and beta
-x0 = [0.15, 0.02]
+x0 = [1, 0]
 bounds = [
-    (0.1, 5), (0.0001, 0.5)
+    (0, np.inf), (0, 0)
 ]
 
 # Optimization
 res = minimize(objective, x0=x0, bounds=bounds, method='L-BFGS-B', options={'disp': True})
 print("Fitted parameters:")
 print(f"alpha = {res.x[0]:.4f}, beta = {res.x[1]:.4f}")
+
+
+# -------------------------------
+# Plot: experimental vs model curve (0..2 kBq)
+# -------------------------------
+
+# Proportional relationship ci0 = k * A0 (estimate k from the dataset, ignoring zeros)
+mask = data[:,1] > 0
+k_prop = np.mean(data[mask,0] / data[mask,1])  # ~4.44e-06 from your table
+print(f"Estimated proportionality ci0 = k*A0, k = {k_prop:.6e}")
+
+# Build a dense activity grid from 0 to 2000 (i.e., 0..2 kBq)
+A_grid = np.linspace(0, 2000, 101)
+ci_grid = k_prop * A_grid
+
+alpha_fit, beta_fit = res.x
+S_model_grid = []
+for ci0, A0 in zip(ci_grid, A_grid):
+    S_model_grid.append(simulate_survival(ci0, A0, alpha_fit, beta_fit))
+S_model_grid = np.array(S_model_grid)
+
+
+# Plot
+plt.figure(figsize=(8,5))
+# Experimental data with ±sigma error bars
+plt.errorbar(data[:,1], data[:,2], yerr=data[:,3], label='Survival data',
+             fmt='o', capsize=5, color='#A0522D')
+
+# Model curve
+plt.plot(A_grid, S_model_grid, '-', label='Survival fit', color='#D2B48C')
+
+plt.xlim(0, 2000)
+plt.ylim(0.0001, 1)
+plt.yscale('log')
+plt.xlabel('Initial activity (kBq)')
+plt.ylabel('Surviving fraction')
+plt.title('Linear Effect Fit to Cell Survival during Ac-225 Treatment')
+plt.grid(True, which='both', alpha=0.3)
+plt.legend(ncol=2)
+plt.tight_layout()
+plt.show()
+

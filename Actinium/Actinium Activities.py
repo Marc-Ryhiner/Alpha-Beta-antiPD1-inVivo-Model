@@ -224,8 +224,8 @@ def combined_2(t, Z):
 
 tspan = (0, 0.5)
 t_eval = np.linspace(*tspan, 167)
-y0 = [0.00889, 0, 0, 0, 0, 0, 0]
-A0 = [2000, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+y0 = [0.00889 * np.exp(mu225ac * 0.5) * 0.2652946819207342, 0, 0, 0, 0, 0, 0]
+A0 = [2000 * np.exp(mu225ac * 0.5) * 0.2652946819207342, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 Z0 = y0 + A0
 sol_0 = solve_ivp(combined_0, tspan, Z0, t_eval=t_eval, method='BDF')
 
@@ -307,7 +307,7 @@ activities = [Ac, Fr, Frg, At, Bia, Bib, Big, Po, Tl, Pb]
 plt.figure(figsize=(8, 5))
 isotopes = ['Ac‑225', 'Fr‑221', 'Fr‑221 γ', 'At‑217',
             'Bi‑213 α', 'Bi‑213 β', 'Bi‑213 γ',
-            'Po‑213', 'Tl‑209', 'Pb‑209', 'Experiment start', 'Cell plating']
+            'Po‑213', 'Tl‑209', 'Pb‑209', 'Total', 'Experiment start', 'Cell plating']
 
 colors = ['#E41A1C', '#4DAF4A', '#377EB8', '#FF7F00',
           '#A65628', '#66A61E', '#7570B3', '#D95F02',
@@ -322,19 +322,21 @@ custom_lines = []
 for color, linetype, name, a in zip(colors, linetypes, isotopes, activities):
     plt.plot(t, a, color=color, linestyle=linetype)
     custom_lines.append(Line2D([0], [0], linestyle='-', color=color))
+plt.plot(t, sum(activities), color='black', label='Total')
 plt.axvline(0.5, color='gray', linestyle=':', label='Experiment Start')
 plt.axvline(3.5, color='gray', linestyle='--', label='Cell Plating')
+custom_lines.append(Line2D([0], [0], linestyle='-', color='black'))
 custom_lines.append(Line2D([0], [0], linestyle=':', color='gray'))
 custom_lines.append(Line2D([0], [0], linestyle='--', color='gray'))
 
 plt.yscale('log')
 plt.xscale('log')
 plt.xlim([0.1, 171.5])
-plt.ylim([0.1, 3e3])
+plt.ylim([0.1, 4e3])
 plt.grid(True, ls="--", linewidth=0.5)
 plt.xlabel('Time (h)')
 plt.ylabel('Activity (Bq)')
-plt.title('Ac-225 Decay Chain Activities')
+plt.title('Ac-225 Decay Chain Activities during Ac-225 Treatment for $A_{t=0.5}=2kBq$')
 plt.legend(custom_lines, isotopes, loc='upper right', ncol=2)
 plt.tight_layout()
 plt.show()

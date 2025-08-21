@@ -155,8 +155,8 @@ def combined_2(t, Z):
 
 tspan = (0, 0.5)
 t_eval = np.linspace(*tspan, 167)
-y0 = [0.00889, 0, 0, 0, 0, 0, 0]
-A0 = [2000, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+y0 = [0.00889 * np.exp(mu225ac * 0.5) * 0.2652946819207342, 0, 0, 0, 0, 0, 0]
+A0 = [2000 * np.exp(mu225ac * 0.5) * 0.2652946819207342, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 Z0 = y0 + A0
 sol_0 = solve_ivp(combined_0, tspan, Z0, t_eval=t_eval, method='BDF')
 
@@ -172,6 +172,7 @@ LET_lo_pre = Frg + Bib + Big + Tl + Pb
 # Initial conditions: chelated Ac in md, zero elsewhere
 y0 = [sol_0.y[0, -1], 0, 0, 0.00889 - sol_0.y[0, -1], 0, 0, sol_0.y[1, -1], 0, sol_0.y[2, -1], 0, sol_0.y[3, -1], 0, sol_0.y[4, -1], 0, sol_0.y[5, -1], 0, sol_0.y[6, -1], 0]  # concentrations
 A0 = [sol_0.y[7, -1], sol_0.y[8, -1], sol_0.y[9, -1], sol_0.y[10, -1], sol_0.y[11, -1], sol_0.y[12, -1], sol_0.y[13, -1], sol_0.y[14, -1], sol_0.y[15, -1], sol_0.y[16, -1]]   # activity states
+
 Z0 = y0 + A0
 
 tspan = (0, 3.0)  # hours
@@ -292,16 +293,19 @@ LET_lo_cyto_2 = Frg * c221fr / (i221fr + c221fr) +\
 plt.figure(figsize=(8,5))
 plt.plot(sol_0.t, LET_hi_pre, label='High LET pre Experiment', color='#FF4500')
 plt.plot(sol_0.t, LET_lo_pre, label='Low LET pre Experiment', color='#1E90FF', ls='--')
+plt.plot(sol_0.t, LET_lo_pre + LET_hi_pre, label='Total pre Experiment', color='grey')
 plt.plot(sol_1.t + 0.5, LET_hi_int, label='High LET Interstitial', color='#B22222')
 plt.plot(sol_1.t + 0.5, LET_hi_bound, label='High LET Bound', color='#FF8C00')
 plt.plot(sol_1.t + 0.5, LET_hi_cyto, label='High LET Cytoplasm', color='#FFD4A3')
 plt.plot(sol_1.t + 0.5, LET_lo_int, label='Low LET Interstitial', color='#004080', ls='--')
 plt.plot(sol_1.t + 0.5, LET_lo_cyto, label='Low LET Cytoplasm', color='#7FDBFF', ls='--')
+plt.plot(sol_1.t + 0.5, LET_hi_int + LET_hi_bound + LET_hi_cyto + LET_lo_int + LET_hi_cyto, label='Total', color='black')
 plt.plot(sol_2.t + 3.5, LET_hi_int_2, color='#B22222')
 plt.plot(sol_2.t + 3.5, LET_hi_bound_2, color='#FF8C00')
 plt.plot(sol_2.t + 3.5, LET_hi_cyto_2, color='#FFD4A3')
 plt.plot(sol_2.t + 3.5, LET_lo_int_2, color='#004080', ls='--')
 plt.plot(sol_2.t + 3.5, LET_lo_cyto_2, color='#7FDBFF', ls='--')
+plt.plot(sol_2.t + 3.5, LET_hi_int_2 + LET_hi_bound_2 + LET_hi_cyto_2 + LET_lo_int_2 + LET_hi_cyto_2, color='black')
 plt.axvline(0.5, color='gray', linestyle=':', label='Experiment Start')
 plt.axvline(3.5, color='gray', linestyle='--', label='Cell Plating')
 
@@ -313,12 +317,12 @@ plt.axvline(3.5, color='gray', linestyle='--', label='Cell Plating')
 #plt.text(0.51, plt.ylim()[1]*0.8, 'Experiment start', rotation=90, va='center', fontsize=6)
 
 plt.xlim([0.1, 171.5])
-plt.ylim([1, 10000])
+plt.ylim([0.1, 4e3])
 plt.yscale('log')
 plt.xscale('log')
 plt.xlabel('Time (h)')
 plt.ylabel('Activity (Bq)')
-plt.title('Compartment- and LET-specific Activities during Ac-225 Treatment')
+plt.title('Compartment- and LET Activities during Ac-225 Treatment for $A_{t=0.5}=2kBq$')
 plt.legend()
 plt.grid(True, ls="--", linewidth=0.5)
 plt.tight_layout()
