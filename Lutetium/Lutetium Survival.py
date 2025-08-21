@@ -95,8 +95,8 @@ ax1.set_xscale('log')
 ax1.tick_params(axis='y', labelcolor=color1)
 ax1.axvline(3, color='gray', linestyle='--', label='Cell plating')
 ax1.set_xlim([0.1, 200])
-ax1.set_ylim([3e-5, 2e-1])
-ax1.yaxis.grid(True, which='both', linestyle='--', linewidth=0.5, color='#d4b8a0')
+ax1.set_ylim([4e-5, 1e-1])
+ax1.yaxis.grid(True, which='major', linestyle='--', linewidth=0.5, color='#d4b8a0')
 ax1.xaxis.grid(True, which='both', linestyle='--', linewidth=0.5)
 
 # Right axis: survival and clinical effect
@@ -108,7 +108,7 @@ ax2.set_ylabel('Total', color=color1)
 ax2.set_yscale('log')
 ax2.set_ylim([0.007, 1.1])
 ax2.tick_params(axis='y', labelcolor=color1)
-ax2.grid(True, which='both', linestyle='--', linewidth=0.5, color='#a3c9a3')
+ax2.grid(True, which='major', linestyle='--', linewidth=0.5, color='#a3c9a3')
 
 # Custom legend handles
 custom_lines = [
@@ -120,6 +120,6 @@ custom_lines = [
 # Add to figure
 ax1.legend(handles=custom_lines, loc='center left')
 
-plt.title('Survival and Clinical Effect during Lu-177 Treatment')
+plt.title('Survival and Clinical Effect during Lu-177 Treatment for $A_0=2 MBq$')
 plt.tight_layout()
 plt.show()
