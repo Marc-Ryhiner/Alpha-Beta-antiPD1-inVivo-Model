@@ -286,19 +286,20 @@ ax2 = ax1.twinx()
 color2 = 'tab:red'
 ax2.set_ylabel('Accumulated Dose (Gy)', color=color2)
 ax2.plot(sol_1.t[1:], HighLET_dose_1, color='crimson')
-line3, = ax2.plot(np.concatenate((np.expand_dims(sol_1.t[-1], axis=0), sol_2.t[1:] + 3)), np.concatenate((np.expand_dims(HighLET_dose_1[-1], axis=0), HighLET_dose_2 + HighLET_dose_1[-1])), color='crimson', label=' ')
+line3, = ax2.plot(np.concatenate((np.expand_dims(sol_1.t[-1], axis=0), sol_2.t[1:] + 3)), np.concatenate((np.expand_dims(HighLET_dose_1[-1], axis=0), HighLET_dose_2 + HighLET_dose_1[-1])), color='crimson', label='High LET')
 ax2.plot(sol_1.t[1:], LowLET_dose_1, color='tomato')
-line4, = ax2.plot(np.concatenate((np.expand_dims(sol_1.t[-1], axis=0), sol_2.t[1:] + 3)), np.concatenate((np.expand_dims(LowLET_dose_1[-1], axis=0), LowLET_dose_2 + LowLET_dose_1[-1])), color='tomato', label=' ')
+line4, = ax2.plot(np.concatenate((np.expand_dims(sol_1.t[-1], axis=0), sol_2.t[1:] + 3)), np.concatenate((np.expand_dims(LowLET_dose_1[-1], axis=0), LowLET_dose_2 + LowLET_dose_1[-1])), color='tomato', label='Low LET')
 ax2.tick_params(axis='y', labelcolor=color2)
 ax2.set_yscale('log')
 ax2.set_ylim(3e-6, 3)
 ax2.yaxis.grid(True, which='major', ls='--', linewidth=0.5, color='#d2a8a8')
 
-line5 = plt.axvline(3, color='gray', linestyle='--', label='Cell Plating')
+line5 = plt.axvline(3, color='gray', linestyle='--', label=' ')
+line6 = plt.axvline(3, color='gray', alpha=0, linestyle='--', label='Cell Plating')
 
-lines = [line1, line3, line2, line4, line5]
+lines = [line1, line2, line5, line3, line4, line6]
 labels = [line.get_label() for line in lines]
-ax1.legend(lines, labels, loc='upper left', title='High / Low LET', ncol=3, alignment='left', columnspacing=0)
+ax1.legend(lines, labels, loc='upper left', ncol=2, alignment='left', columnspacing=0)
 plt.title('LET Doses during Ac-225 Treatment for $A_0=2kBq$')
 fig.tight_layout()
 #fig.legend()
