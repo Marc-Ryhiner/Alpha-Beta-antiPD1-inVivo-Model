@@ -273,7 +273,7 @@ ax1.tick_params(axis='y', labelcolor=color1)
 ax1.set_xscale('log')
 ax1.set_yscale('log')
 ax1.set_xlim(0.1, 200)
-ax1.set_ylim(1e-7, 0.2)
+ax1.set_ylim(2e-7, 0.2)
 ax1.yaxis.grid(True, which='major', ls='--', linewidth=0.5, color='#d4b8a0')
 ax1.xaxis.grid(True, which='both', ls='--', linewidth=0.5)
 ax1.axvline(3, color='gray', linestyle='--', label='Cell Plating')
@@ -309,6 +309,6 @@ custom_lines = [
 ]
 
 # Add to figure
-plt.legend(handles=custom_lines, ncol=2, bbox_to_anchor=(0.7, 0.25), columnspacing=0)
-
+plt.legend(handles=custom_lines, ncol=2, bbox_to_anchor=(0.7, 0.23), columnspacing=0)
+plt.tight_layout()
 plt.show()
