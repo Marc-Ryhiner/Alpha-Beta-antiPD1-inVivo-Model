@@ -283,8 +283,8 @@ ax1.axvline(3, color='gray', linestyle='--', label='Cell Plating')
 # Second axis for cumulative dose
 ax2 = ax1.twinx()
 color2 = 'tab:green'
-ax2.plot(time_array, clinical_effect_high_array, color='#006400', label='Clinical effect high', linestyle='--')
-ax2.plot(time_array, clinical_effect_low_array, color='#32CD32', label='Clinical effect low', linestyle='--')
+ax2.plot(time_array, clinical_effect_high_array, color='#006400', label='Clinical effect high', linestyle='-.')
+ax2.plot(time_array, clinical_effect_low_array, color='#32CD32', label='Clinical effect low', linestyle='-.')
 ax2.plot(time_array, survival_array, label='Survival', color=color2)
 ax2.set_ylabel('Total', color=color2)
 ax2.tick_params(axis='y', labelcolor=color2)
