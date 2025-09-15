@@ -186,7 +186,11 @@ def fit_each_replicate_global(days, replicates, dataset_name, lambda_prev, ccr_p
     plt.xlabel("Days post inoculation")
     plt.ylabel("Tumor size (mL)")
     plt.title(f"Dataset {dataset_name}")
-    plt.legend()
+    if dataset_name == "UCLA 2":
+        plt.legend(loc='upper right', ncol=2)
+    else:
+        plt.legend()
+    plt.tight_layout()
     plt.show()
 
     return fitted_params
