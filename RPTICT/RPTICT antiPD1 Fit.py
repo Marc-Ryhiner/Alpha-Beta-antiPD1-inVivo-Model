@@ -32,10 +32,10 @@ def tumor_immune_system(t, y, lambda_dup, c_cr, s_2, dataset,
 
     # --- Piecewise param handling ---
     if dataset.startswith("UCLA"):
-        if t <= 13:
+        if t <= 9:
             s_eff = s_1
             m_eff = m
-        elif t <= 33:
+        elif t <= 32:
             s_eff = s_2
             m_eff = 0
         else:
